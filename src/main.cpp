@@ -1,5 +1,7 @@
 #include <WiFi.h>
 #include <ESPAsyncWebServer.h>
+#include "disruptors.h"
+#include <flag_utils.cpp>
 
 const char *apSSID = "ESP32_Config";
 const char *apPassword = "12345678";
@@ -7,6 +9,8 @@ AsyncWebServer server(80);
 
 WiFiServer shellServer(23);
 WiFiClient shellClient;
+
+bool authenticated = false;
 
 void setupAP() {
     WiFi.softAP(apSSID, apPassword);
@@ -46,7 +50,8 @@ void handleWebRequests() {
                 Serial.print("IP Address: ");
                 Serial.println(WiFi.localIP());
                 
-                shellServer.begin(); // Запуск TCP-сервера
+                server.end(); // Stop the web server
+                shellServer.begin(); // Start the shell server
                 Serial.println("Shell server started on port 23");
 
                 request->send(200, "text/plain", "WiFi Connected. IP: " + WiFi.localIP().toString());
@@ -68,28 +73,62 @@ void handleShell() {
         if (shellClient) {
             Serial.println("New Shell Client Connected!");
             shellClient.println("Welcome to ESP32 Shell!");
-            shellClient.print("> ");
+            shellClient.print("Login: ");
         }
     }
 
     if (shellClient && shellClient.available()) {
-        String command = shellClient.readStringUntil('\n');
-        command.trim();
-        Serial.println("Received: " + command);
+        String input = shellClient.readStringUntil('\n');
+        input.trim();
+        Serial.println("Received: " + input);
 
-        if (command == "help") {
-            shellClient.println("Available commands: help, status, reboot");
-        } else if (command == "status") {
-            shellClient.println("ESP32 is running.");
-        } else if (command == "reboot") {
-            shellClient.println("Rebooting...");
-            delay(1000);
-            ESP.restart();
+        if (!authenticated) {
+            if (input == "admin' OR '1'='1") {
+                authenticated = true;
+                shellClient.println("Login successful!");
+                shellClient.print("> ");
+            } else {
+                shellClient.println("Login failed. Try again.");
+                shellClient.print("Login: ");
+            }
         } else {
-            shellClient.println("Unknown command. Type 'help' for list of commands.");
+            if (random(1, 10) <= 2) { // 20% chance to echo the command
+                shellClient.println(input);
+            } else {
+                if (input == "help") {
+                    shellClient.println("Available commands: help, status, reboot, change_ip");
+                } else if (input == "status") {
+                    shellClient.println("ESP32 is running.");
+                } else if (input == "reboot") {
+                    shellClient.println("Rebooting...");
+                    delay(1000);
+                    ESP.restart();
+                } else if (input == "change_ip") {
+                    shellClient.println("Changing IP...");
+                    WiFi.disconnect();
+                    delay(1000);
+                    WiFi.reconnect();
+                    unsigned long startAttemptTime = millis();
+                    while (WiFi.status() != WL_CONNECTED && millis() - startAttemptTime < 10000) {
+                        delay(100);
+                        Serial.print(".");
+                    }
+                    if (WiFi.status() == WL_CONNECTED) {
+                        Serial.println("\nConnected!");
+                        Serial.print("New IP Address: ");
+                        Serial.println(WiFi.localIP());
+                        shellClient.println("New IP Address: " + WiFi.localIP().toString());
+                        shellServer.begin(); // Restart TCP server
+                    } else {
+                        Serial.println("\nFailed to reconnect.");
+                        shellClient.println("Failed to reconnect.");
+                    }
+                } else {
+                    shellClient.println("Unknown command. Type 'help' for list of commands.");
+                }
+            }
+            shellClient.print("> ");
         }
-
-        shellClient.print("> ");
     }
 }
 
@@ -101,4 +140,5 @@ void setup() {
 
 void loop() {
     handleShell(); // Обробка команд у shell
+    disruptorTask(); // Виклик disruptorTask
 }
