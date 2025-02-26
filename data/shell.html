@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ESP32 WebSocket Shell</title>
+    <link rel="stylesheet" href="/xterm.css" />
+    <style>
+        body {
+            background-color: black;
+            color: white;
+            font-family: monospace;
+        }
+        #terminal {
+            width: 100%;
+            height: 100vh;
+        }
+    </style>
+    <script src="/xterm.js"></script>
+</head>
+<body>
+    <div id="terminal"></div>
+    <script>
+        const term = new Terminal();
+        const terminalDiv = document.getElementById('terminal');
+        let inputBuffer = '';
+        let commandHistory = [];
+        let historyIndex = -1;
+
+        term.open(terminalDiv);
+
+        let socket = new WebSocket(`ws://${window.location.hostname}/ws`);
+
+        socket.onopen = () => {
+            term.write('Connected to ESP32 WebSocket Shell\r\n');
+        };
+
+        socket.onmessage = (event) => {
+            term.write(event.data + '\r\n');
+        };
+
+        socket.onerror = (error) => {
+            term.write('\r\nWebSocket Error: ' + JSON.stringify(error) + '\r\n');
+            console.error('WebSocket Error:', error);
+        };
+
+        socket.onclose = (event) => {
+            term.write('\r\nConnection closed. Code: ' + event.code + ', Reason: ' + event.reason + '\r\n');
+            console.log('WebSocket closed:', event);
+            // Attempt to reconnect after 5 seconds
+            setTimeout(() => {
+                term.write('Attempting to reconnect...\r\n');
+                socket = new WebSocket(`ws://${window.location.hostname}/ws`);
+                // Redefine handlers for the new connection
+                socket.onopen = () => {
+                    term.write('Reconnected to ESP32 WebSocket Shell\r\n');
+                };
+                socket.onmessage = (event) => {
+                    term.write(event.data + '\r\n');
+                };
+                socket.onerror = (error) => {
+                    term.write('\r\nWebSocket Error: ' + JSON.stringify(error) + '\r\n');
+                    console.error('WebSocket Error:', error);
+                };
+                socket.onclose = (event) => {
+                    term.write('\r\nConnection closed. Code: ' + event.code + ', Reason: ' + event.reason + '\r\n');
+                    console.log('WebSocket closed:', event);
+                };
+            }, 5000);
+        };
+
+        term.onData(data => {
+            if (data === '\r') {
+                socket.send(inputBuffer);
+                commandHistory.push(inputBuffer);
+                historyIndex = commandHistory.length;
+                inputBuffer = '';
+                term.write('\r\n');
+            } else if (data === '\u007F') { // Handle backspace
+                if (inputBuffer.length > 0) {
+                    inputBuffer = inputBuffer.slice(0, -1);
+                    term.write('\b \b');
+                }
+            } else if (data === '\u001B[A') { // Handle up arrow
+                if (historyIndex > 0) {
+                    historyIndex--;
+                    term.write('\r\x1b[K' + commandHistory[historyIndex]);
+                    inputBuffer = commandHistory[historyIndex];
+                }
+            } else if (data === '\u001B[B') { // Handle down arrow
+                if (historyIndex < commandHistory.length - 1) {
+                    historyIndex++;
+                    term.write('\r\x1b[K' + commandHistory[historyIndex]);
+                    inputBuffer = commandHistory[historyIndex];
+                } else {
+                    historyIndex = commandHistory.length;
+                    term.write('\r\x1b[K');
+                    inputBuffer = '';
+                }
+            } else {
+                inputBuffer += data;
+                term.write(data);
+            }
+        });
+    </script>
+</body>
+</html>

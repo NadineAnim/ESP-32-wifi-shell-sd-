@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WiFi Configuration</title>
+    <style>
+        body {
+            background-color: black;
+            color: white;
+            font-family: monospace;
+            text-align: center;
+            margin-top: 20%;
+        }
+    </style>
+</head>
+<body>
+    <h1>WiFi Configuration</h1>
+    <form id="form">
+        <label for="ssid">SSID:</label>
+        <input type="text" id="ssid" name="ssid" required><br><br>
+        <label for="password">Password:</label>
+        <input type="password" id="password" name="password" required><br><br>
+        <input type="submit" value="Connect">
+    </form>
+    <script>
+        const form = document.getElementById('form');
+        form.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const ssid = document.getElementById('ssid').value;
+            const password = document.getElementById('password').value;
+            fetch('/setwifi', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: `ssid=${ssid}&password=${password}`
+            }).then(response => response.text()).then(data => {
+                alert(data);
+                if (data.includes('WiFi Connected')) {
+                    window.location.href = '/shell';
+                }
+            });
+        });
+    </script>
+</body>
+</html>

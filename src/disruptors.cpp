@@ -6,73 +6,42 @@ unsigned long lastInterrupt = 0;
 bool flashActive = false;
 unsigned long flashStart = 0;
 
-extern WiFiClient shellClient;
+extern AsyncWebSocket ws;
 
 void disruptorTask() {
-    if (millis() - lastInterrupt > 60000) { // Кожні 60 секунд
+    if (millis() - lastInterrupt > 60000) { // Every 60 seconds
         lastInterrupt = millis();
         
-        int randomEvent = random(1, 6); // Випадковий ефект (додаємо флешку)
+        int randomEvent = random(1, 6); // Random effect (including flashbang)
         switch (randomEvent) {
             case 1:
-                if (shellClient && shellClient.connected()) {
-                    shellClient.println("Warning: System integrity check failed!");
-                } else {
-                    Serial.println("Warning: System integrity check failed!");
-                }
+                ws.textAll("Warning: System integrity check failed!");
                 break;
             case 2:
-                if (shellClient && shellClient.connected()) {
-                    shellClient.println("FAKE_FLAG{12345}");
-                } else {
-                    Serial.println("FAKE_FLAG{12345}");
-                }
+                ws.textAll("FAKE_FLAG{12345}");
                 break;
             case 3:
-                if (shellClient && shellClient.connected()) {
-                    shellClient.println("\033[2J\033[H"); // Очищення екрану
-                } else {
-                    Serial.println("\033[2J\033[H"); // Очищення екрану
-                }
+                ws.textAll("\033[2J\033[H"); // Clear screen
                 break;
             case 4:
-                if (shellClient && shellClient.connected()) {
-                    shellClient.println("System will reboot in 30 seconds...");
-                } else {
-                    Serial.println("System will reboot in 30 seconds...");
-                }
+                ws.textAll("System will reboot in 30 seconds...");
                 break;
             case 5:
-                if (shellClient && shellClient.connected()) {
-                    shellClient.println("⚡ FLASHBANG ACTIVATED! ⚡");
-                } else {
-                    Serial.println("⚡ FLASHBANG ACTIVATED! ⚡");
-                }
+                ws.textAll("⚡ FLASHBANG ACTIVATED! ⚡");
                 flashActive = true;
                 flashStart = millis();
                 break;
         }
     }
 
-    // Якщо флешка активна, засліплюємо екран
+    // If flashbang is active, blind the screen
     if (flashActive) {
-        if (millis() - flashStart < 5000) { // Засліплюємо на 5 секунд
-            for (int i = 0; i < 10; i++) { // Reduce the amount of data being sent
-                if (shellClient && shellClient.connected()) {
-                    shellClient.println("██████████████████████████████████████████████████");
-                } else {
-                    Serial.println("██████████████████████████████████████████████████");
-                }
-            }
+        if (millis() - flashStart < 5000) { // Blind for 5 seconds
+            ws.textAll("\033[48;5;15m\033[2J\033[H"); // White background
         } else {
             flashActive = false; 
-            if (shellClient && shellClient.connected()) {
-                shellClient.println("\033[2J\033[H");
-                shellClient.println("System recovered from flashbang.");
-            } else {
-                Serial.println("\033[2J\033[H");
-                Serial.println("System recovered from flashbang.");
-            }
+            ws.textAll("\033[0m\033[2J\033[H"); // Reset terminal
+            ws.textAll("System recovered from flashbang.");
         }
     }
 }
